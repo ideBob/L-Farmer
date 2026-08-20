@@ -1,6 +1,6 @@
 # L Farmer
 
-**Version:** 1.0.0  
+**Version:** 1.1.0  
 Roblox AFK farming utility with ESP, Spectate, FullBright, Anti-AFK and Auto Run.
 
 Stable position lock, clean modular architecture, no teleport fighting or connection stacking.
@@ -12,7 +12,8 @@ Stable position lock, clean modular architecture, no teleport fighting or connec
 - **L Farmer** – Teleport + stable platform lock (no snapping / jitter)
 - **L Esp** – Ticket ESP
 - **L Plr Esp** – Player name ESP
-- **Spectate** – Fourth floating button with live player dropdown and camera-only spectating
+- **Spectate** – Floating button with live player dropdown and camera-only spectating
+- **Turn Off Spectate** – Dedicated floating button that instantly restores normal camera control
 - **Built-in Full Bright** – Automatic, no toggle
 - **Built-in Anti-AFK** – Automatic, no toggle
 - **Built-in Auto Run / Activity Detection** – Lightweight, skips while locked
@@ -69,11 +70,12 @@ local LOCK_THRESHOLD = 6  -- only correct position if drifted farther than this
 ## Usage
 
 1. Execute the loadstring.
-2. Four floating buttons appear (draggable):
+2. Five floating buttons appear (draggable):
    - **L Farmer** – Toggle AFK lock on/off
    - **L Esp** – Toggle ticket ESP
    - **L Plr Esp** – Toggle player ESP
    - **Spectate** – Left-click opens player dropdown; right-click toggles spectate on/off
+   - **Turn Off Spectate** – Instantly stops spectating and restores your normal camera
 3. FullBright, Anti-AFK and Auto Run start automatically.
 
 ---
@@ -84,8 +86,8 @@ local LOCK_THRESHOLD = 6  -- only correct position if drifted farther than this
 |---------|----------|
 | Script does nothing | Ensure your executor supports `HttpGet` + `loadstring` |
 | "Failed to load" warning | Check internet / GitHub availability |
-| Character snaps / teleports randomly | Make sure you are on the latest version (1.0.0+). Old versions had continuous CFrame spam. |
-| Spectate camera stuck | Right-click the Spectate button or rejoin |
+| Character snaps / teleports randomly | Make sure you are on the latest version (1.1.0+). Old versions had continuous CFrame spam. |
+| Spectate camera stuck | Press the **Turn Off Spectate** button |
 | Buttons missing after death | UI uses `ResetOnSpawn = false`; re-execute if needed |
 
 ---
