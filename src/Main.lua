@@ -1,10 +1,10 @@
 --[[
-    L Farmer v1.0.0
+    L Farmer v1.1.0
     Pure AFK + L Esp + L Plr Esp + Spectate + FullBright + Anti-AFK + Auto Run
     Refined: stable lock, clean connections, modular systems, no teleport fighting
 ]]
 
-local VERSION = "1.0.0"
+local VERSION = "1.1.0"
 
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
@@ -87,7 +87,6 @@ end
 local function InitializeFullBright()
     enableFullBright()
 
-    -- Lightweight guard – only re-apply when the game actively changes lighting
     if connections.fullBright then
         connections.fullBright:Disconnect()
     end
@@ -110,7 +109,6 @@ local function InitializeAntiAFK()
         VirtualUser:ClickButton2(Vector2.new())
     end)
 
-    -- Lightweight pulse (no spam)
     if connections.antiAfkPulse then
         task.cancel(connections.antiAfkPulse)
     end
@@ -137,7 +135,6 @@ local function InitializeAutoRun()
         while true do
             task.wait(12 + math.random() * 6)
 
-            -- Only act when NOT in the locked AFK state
             if isEnabled then
                 continue
             end
@@ -145,7 +142,6 @@ local function InitializeAutoRun()
             local char = player.Character
             local humanoid = safeGetHumanoid(char)
             if humanoid and humanoid.Health > 0 and humanoid.WalkSpeed > 0 then
-                -- Extremely subtle activity registration – does not fight movement
                 humanoid:Move(Vector3.new(0.008, 0, 0), true)
                 task.wait(0.04)
                 humanoid:Move(Vector3.zero, true)
@@ -186,7 +182,6 @@ local function teleportAndLock()
         createPlatform()
     end
 
-    -- Single authoritative placement
     root.CFrame = lockedCFrame
     root.AssemblyLinearVelocity = Vector3.zero
     root.AssemblyAngularVelocity = Vector3.zero
@@ -221,7 +216,6 @@ local function InitializeLockLoop()
         local humanoid = safeGetHumanoid(char)
         if not root or not humanoid or not lockedCFrame then return end
 
-        -- Only correct significant drift – eliminates constant repositioning / snapping
         local distance = (root.Position - lockedCFrame.Position).Magnitude
         if distance > LOCK_THRESHOLD then
             root.CFrame = lockedCFrame
@@ -229,7 +223,6 @@ local function InitializeLockLoop()
             root.AssemblyAngularVelocity = Vector3.zero
         end
 
-        -- Keep movement locked without fighting every frame
         if humanoid.WalkSpeed ~= 0 then
             humanoid.WalkSpeed = 0
             humanoid.JumpPower = 0
@@ -242,14 +235,21 @@ end
 -- SPECTATE SYSTEM
 -- ======================
 local function StopSpectating()
+    -- Idempotent: safe to call repeatedly
     spectateEnabled = false
     selectedSpectatePlayer = nil
 
+    -- Force camera back to local player
     local myHum = safeGetHumanoid(player.Character)
     if myHum then
         camera.CameraSubject = myHum
-    else
-        camera.CameraSubject = player.Character or camera.CameraSubject
+    elseif player.Character then
+        camera.CameraSubject = player.Character
+    end
+
+    -- Ensure camera type is back to normal custom (prevents locked follow)
+    if camera.CameraType ~= Enum.CameraType.Custom then
+        camera.CameraType = Enum.CameraType.Custom
     end
 end
 
@@ -276,7 +276,6 @@ local function InitializeSpectate()
     connections.spectateLoop = RunService.RenderStepped:Connect(function()
         if not spectateEnabled or not selectedSpectatePlayer then return end
 
-        -- Target left the server
         if not selectedSpectatePlayer.Parent then
             StopSpectating()
             return
@@ -289,10 +288,8 @@ local function InitializeSpectate()
             if camera.CameraSubject ~= hum then
                 camera.CameraSubject = hum
             end
-        else
-            -- Target died / respawning – wait for new character
-            -- Do nothing; CharacterAdded on target will re-apply if still selected
         end
+        -- If target has no character yet (respawning), wait; do not force camera elsewhere
     end)
 end
 
@@ -355,6 +352,7 @@ local mainFrame, toggleButton = createButtonFrame("Main", UDim2.new(0, 160, 0, 4
 local espFrame, espButton = createButtonFrame("EspFrame", UDim2.new(0, 110, 0, 40), UDim2.new(0.05, 0, 0.25, 0), "L Esp: OFF")
 local plrEspFrame, plrEspButton = createButtonFrame("PlrEspFrame", UDim2.new(0, 130, 0, 40), UDim2.new(0.05, 0, 0.35, 0), "L Plr Esp: OFF")
 local spectateFrame, spectateButton = createButtonFrame("SpectateFrame", UDim2.new(0, 140, 0, 40), UDim2.new(0.05, 0, 0.45, 0), "Spectate: OFF")
+local turnOffSpectateFrame, turnOffSpectateButton = createButtonFrame("TurnOffSpectateFrame", UDim2.new(0, 170, 0, 40), UDim2.new(0.05, 0, 0.55, 0), "Turn Off Spectate")
 
 -- Spectate Dropdown
 local dropdownFrame = Instance.new("Frame")
@@ -429,6 +427,7 @@ makeDraggable(mainFrame, toggleButton)
 makeDraggable(espFrame, espButton)
 makeDraggable(plrEspFrame, plrEspButton)
 makeDraggable(spectateFrame, spectateButton)
+makeDraggable(turnOffSpectateFrame, turnOffSpectateButton)
 
 -- ======================
 -- SPECTATE DROPDOWN
@@ -463,7 +462,6 @@ local function RefreshPlayerList()
                 dropdownFrame.Visible = false
                 dropdownFrame.Size = UDim2.new(0, 180, 0, 0)
 
-                -- Auto-start spectate when a player is chosen
                 if not spectateEnabled then
                     StartSpectating(plr)
                     spectateButton.BackgroundColor3 = Color3.fromRGB(0, 140, 60)
@@ -495,7 +493,7 @@ end
 
 spectateButton.MouseButton1Click:Connect(toggleSpectateUI)
 
--- Right-click to toggle spectate on/off
+-- Right-click still works as a quick toggle
 spectateButton.MouseButton2Click:Connect(function()
     if spectateEnabled then
         StopSpectating()
@@ -512,6 +510,29 @@ spectateButton.MouseButton2Click:Connect(function()
             Duration = 3
         })
     end
+end)
+
+-- Dedicated Turn Off Spectate button
+turnOffSpectateButton.MouseButton1Click:Connect(function()
+    StopSpectating()
+
+    -- Always reset the main Spectate button appearance
+    spectateButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    spectateButton.Text = "Spectate: OFF"
+
+    -- Close dropdown if open
+    if dropdownFrame.Visible then
+        dropdownFrame.Visible = false
+        dropdownFrame.Size = UDim2.new(0, 180, 0, 0)
+    end
+
+    -- Visual feedback on the turn-off button
+    turnOffSpectateButton.BackgroundColor3 = Color3.fromRGB(140, 40, 40)
+    task.delay(0.25, function()
+        if turnOffSpectateButton and turnOffSpectateButton.Parent then
+            turnOffSpectateButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+        end
+    end)
 end)
 
 -- ======================
@@ -592,7 +613,6 @@ local function InitializeESP()
         connections.espLoop:Disconnect()
     end
 
-    -- Throttled update (every ~0.25s) instead of every Heartbeat
     local lastUpdate = 0
     connections.espLoop = RunService.Heartbeat:Connect(function()
         local now = tick()
@@ -673,20 +693,18 @@ end)
 -- CHARACTER / PLAYER HANDLING
 -- ======================
 local function onCharacterAdded(char)
-    task.wait(0.8) -- let character fully load
+    task.wait(0.8)
 
     if isEnabled then
         teleportAndLock()
     end
 
-    -- Re-apply spectate if active
     if spectateEnabled and selectedSpectatePlayer then
         local hum = safeGetHumanoid(selectedSpectatePlayer.Character)
         if hum then
             camera.CameraSubject = hum
         end
     else
-        -- Ensure camera is back on us after respawn
         local myHum = safeGetHumanoid(char)
         if myHum and not spectateEnabled then
             camera.CameraSubject = myHum
@@ -696,7 +714,6 @@ end
 
 connections.characterAdded = player.CharacterAdded:Connect(onCharacterAdded)
 
--- Keep player list fresh
 connections.playerAdded = Players.PlayerAdded:Connect(function()
     if dropdownFrame.Visible then
         RefreshPlayerList()
@@ -732,7 +749,6 @@ InitializeLockLoop()
 InitializeSpectate()
 InitializeESP()
 
--- Safety: if script is destroyed, clean up
 screenGui.Destroying:Connect(function()
     cleanupConnections()
     if platform then
