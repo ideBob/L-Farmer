@@ -1,15 +1,64 @@
 --[[
-    L Farmer v1.4.0
-    Pure AFK + L Esp + L Plr Esp + Spectate + FullBright + Anti-AFK + Auto Run
-    + Spotify + YouTube + Player Media + Friend Request Manager
+    L Farmer v1.4.0 entry
+    Loads full implementation from last complete Main snapshot, then attaches Friend Manager.
 ]]
-
 local VERSION = "1.4.0"
 
--- Bootstrap: load full script body from repo modules is handled below.
--- Friend Request Manager is installed via FriendRequestUI after UI is built.
+local src = game:HttpGet("https://raw.githubusercontent.com/ideBob/L-Farmer/5dc176b100190492b93ce9e89655ad36ea18f58d/src/Main.lua")
+local fn, err = loadstring(src)
+if not fn then
+    error("L Farmer failed to load core: " .. tostring(err))
+end
+fn()
 
--- NOTE: Full Main body is large; this update only ensures module loads + install hooks.
--- If you see this stub instead of the full UI, re-fetch Main from the previous commit.
+-- Friend Request Manager
+task.defer(function()
+    local function loadMod(url)
+        local ok, body = pcall(function() return game:HttpGet(url) end)
+        if not ok or type(body) ~= "string" then return nil end
+        local f = loadstring(body)
+        if not f then return nil end
+        local mok, mod = pcall(f)
+        if mok then return mod end
+        return nil
+    end
 
-error("Main.lua push was truncated — use previous Main + module load. Reverting strategy.")
+    local FriendManager = loadMod("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/FriendManager.lua")
+    local installFriendUI = loadMod("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/FriendRequestUI.lua")
+    if type(installFriendUI) ~= "function" or not FriendManager then return end
+
+    local player = game:GetService("Players").LocalPlayer
+    local gui = player.PlayerGui:FindFirstChild("LFarmerGui")
+    if not gui or gui:FindFirstChild("FriendRequestPanel") then return end
+
+    local TweenService = game:GetService("TweenService")
+    local StarterGui = game:GetService("StarterGui")
+    local UserInputService = game:GetService("UserInputService")
+
+    local function makeDraggable(frame, handle)
+        local dragging, dragInput, dragStart, startPos
+        handle.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                dragStart = input.Position
+                startPos = frame.Position
+                input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then dragging = false end
+                end)
+            end
+        end)
+        handle.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+                dragInput = input
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(input)
+            if input == dragInput and dragging then
+                local delta = input.Position - dragStart
+                frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            end
+        end)
+    end
+
+    pcall(installFriendUI, gui, makeDraggable, StarterGui, TweenService, FriendManager)
+end)
