@@ -1,7 +1,7 @@
 # L Farmer
 
-**Version:** 1.1.0  
-Roblox AFK farming utility with ESP, Spectate, FullBright, Anti-AFK and Auto Run.
+**Version:** 1.2.0  
+Roblox AFK farming utility with ESP, Spectate, FullBright, Anti-AFK, Auto Run and Spotify dashboard.
 
 Stable position lock, clean modular architecture, no teleport fighting or connection stacking.
 
@@ -13,18 +13,15 @@ Stable position lock, clean modular architecture, no teleport fighting or connec
 - **L Esp** – Ticket ESP
 - **L Plr Esp** – Player name ESP
 - **Spectate** – Floating button with live player dropdown and camera-only spectating
-- **Turn Off Spectate** – Dedicated floating button that instantly restores normal camera control
-- **Built-in Full Bright** – Automatic, no toggle
-- **Built-in Anti-AFK** – Automatic, no toggle
-- **Built-in Auto Run / Activity Detection** – Lightweight, skips while locked
-- Proper connection cleanup, respawn handling, player join/leave handling
-- Smooth UI animations and consistent styling
+- **Turn Off Spectate** – Instantly restores normal camera control
+- **Spotify** – Session-token dashboard (Now Playing, Recently Played, Playlists, Liked Songs)
+- **Built-in Full Bright** – Automatic
+- **Built-in Anti-AFK** – Automatic
+- **Built-in Auto Run** – Lightweight activity detection
 
 ---
 
 ## Installation / Loadstring
-
-Copy and paste this into your executor:
 
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ideBob/L-Farmer/main/loader/Loader.lua"))()
@@ -38,6 +35,25 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ideBob/L-Farmer/main/
 
 ---
 
+## Spotify Setup
+
+Spotify does **not** use simple API keys. You need a temporary **OAuth access token** with the right scopes.
+
+1. Go to the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) and create an app.
+2. Use the Authorization Code flow (or a trusted token generator that supports user scopes) to obtain a short-lived access token with at least:
+   - `user-read-currently-playing`
+   - `user-read-recently-played`
+   - `user-read-playback-state`
+   - `playlist-read-private`
+   - `user-library-read`
+3. Open the **Spotify** button in the script UI.
+4. Paste the access token into the field and press **Apply Key**.
+5. The token is kept **only in memory for the current session**. It is never written to disk, never logged, and never committed.
+
+Tokens expire (usually after 1 hour). When they expire, paste a fresh one.
+
+---
+
 ## Repository Structure
 
 ```
@@ -45,38 +61,38 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ideBob/L-Farmer/main/
 ├── README.md
 ├── LICENSE
 ├── src/
-│   └── Main.lua          # Full production script
+│   ├── Main.lua          # Main script + UI
+│   └── SpotifyAPI.lua    # Modular Spotify client
 └── loader/
     └── Loader.lua        # Tiny remote loader
 ```
-
-- `src/Main.lua` – All functionality lives here. Update this file to push changes to every user.
-- `loader/Loader.lua` – Extremely small. Fetches the latest `Main.lua` and executes it. Fails gracefully on network errors.
 
 ---
 
 ## Configuration
 
-Editable constants at the top of `src/Main.lua`:
+Editable constants in `src/Main.lua`:
 
 ```lua
 local TELEPORT_POSITION = Vector3.new(0, 15000, 0)
 local PLATFORM_SIZE = Vector3.new(60, 2, 60)
-local LOCK_THRESHOLD = 6  -- only correct position if drifted farther than this
+local LOCK_THRESHOLD = 6
 ```
 
 ---
 
 ## Usage
 
-1. Execute the loadstring.
-2. Five floating buttons appear (draggable):
-   - **L Farmer** – Toggle AFK lock on/off
-   - **L Esp** – Toggle ticket ESP
-   - **L Plr Esp** – Toggle player ESP
-   - **Spectate** – Left-click opens player dropdown; right-click toggles spectate on/off
-   - **Turn Off Spectate** – Instantly stops spectating and restores your normal camera
-3. FullBright, Anti-AFK and Auto Run start automatically.
+Floating buttons (all draggable):
+
+| Button | Action |
+|--------|--------|
+| L Farmer | Toggle AFK lock |
+| L Esp | Toggle ticket ESP |
+| L Plr Esp | Toggle player ESP |
+| Spectate | Open player list / right-click toggle |
+| Turn Off Spectate | Force-stop spectate + restore camera |
+| Spotify | Open Spotify dashboard |
 
 ---
 
@@ -84,18 +100,20 @@ local LOCK_THRESHOLD = 6  -- only correct position if drifted farther than this
 
 | Problem | Solution |
 |---------|----------|
-| Script does nothing | Ensure your executor supports `HttpGet` + `loadstring` |
-| "Failed to load" warning | Check internet / GitHub availability |
-| Character snaps / teleports randomly | Make sure you are on the latest version (1.1.0+). Old versions had continuous CFrame spam. |
-| Spectate camera stuck | Press the **Turn Off Spectate** button |
-| Buttons missing after death | UI uses `ResetOnSpawn = false`; re-execute if needed |
+| Script does nothing | Executor must support `HttpGet` + `loadstring` |
+| Spotify “No supported HTTP request method” | Your executor needs `syn.request` / `http.request` / equivalent for Authorization headers |
+| Invalid or expired token | Generate a new access token |
+| Missing permissions / scopes | Token must include the scopes listed above |
+| Spectate camera stuck | Press **Turn Off Spectate** |
 
 ---
 
-## Credits
+## Security Notes
 
-- Original concept & UI style: L Farmer
-- Refactor, stability fixes, modular systems, Spectate, built-ins: production release
+- Access tokens live only in process memory for the current session.
+- The token field is cleared after Apply.
+- Tokens are never printed, never stored in the repo, and never sent anywhere except Spotify’s official API.
+- On UI destroy the token is explicitly cleared.
 
 ---
 
