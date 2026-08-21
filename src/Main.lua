@@ -1,8 +1,8 @@
 --[[
-    L Farmer v1.4.0 entry
-    Loads full implementation from last complete Main snapshot, then attaches Friend Manager.
+    L Farmer v1.5.0 entry
+    Loads core Main snapshot, Friend Manager, then Evade RoundDetector bootstrap.
 ]]
-local VERSION = "1.4.0"
+local VERSION = "1.5.0"
 
 local src = game:HttpGet("https://raw.githubusercontent.com/ideBob/L-Farmer/5dc176b100190492b93ce9e89655ad36ea18f58d/src/Main.lua")
 local fn, err = loadstring(src)
@@ -11,18 +11,18 @@ if not fn then
 end
 fn()
 
+local function loadMod(url)
+    local ok, body = pcall(function() return game:HttpGet(url) end)
+    if not ok or type(body) ~= "string" then return nil end
+    local f = loadstring(body)
+    if not f then return nil end
+    local mok, mod = pcall(f)
+    if mok then return mod end
+    return nil
+end
+
 -- Friend Request Manager
 task.defer(function()
-    local function loadMod(url)
-        local ok, body = pcall(function() return game:HttpGet(url) end)
-        if not ok or type(body) ~= "string" then return nil end
-        local f = loadstring(body)
-        if not f then return nil end
-        local mok, mod = pcall(f)
-        if mok then return mod end
-        return nil
-    end
-
     local FriendManager = loadMod("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/FriendManager.lua")
     local installFriendUI = loadMod("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/FriendRequestUI.lua")
     if type(installFriendUI) ~= "function" or not FriendManager then return end
@@ -61,4 +61,12 @@ task.defer(function()
     end
 
     pcall(installFriendUI, gui, makeDraggable, StarterGui, TweenService, FriendManager)
+end)
+
+-- Evade RoundDetector + polished Round floating button
+task.defer(function()
+    local boot = loadMod("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/Evade/Bootstrap.lua")
+    if type(boot) == "function" then
+        pcall(boot)
+    end
 end)
