@@ -1,6 +1,6 @@
 --[[
-    L Farmer - YouTubeAPI Module v1.3.0
-    Session-only API key. Never logged or committed.
+    L Farmer - YouTubeAPI Module v1.3.1
+    Session-only API key + URL helpers + oEmbed (Player Media needs no key)
 ]]
 
 local HttpService = game:GetService("HttpService")
@@ -22,7 +22,6 @@ local function httpRequest(opts)
         local ok, res = pcall(fn)
         if ok and res then return res end
     end
-    -- Fallback GET (works for YouTube Data API which is GET-based)
     if (opts.Method == "GET" or not opts.Method) then
         local ok, body = pcall(function() return game:HttpGet(opts.Url) end)
         if ok and body then
@@ -77,30 +76,23 @@ function YouTubeAPI:_request(path, query)
         self.lastError = "No API key set"
         return nil, self.lastError
     end
-
     local url = BASE .. path .. "?" .. (query or "") .. "&key=" .. self.key
-
     local res, err = httpRequest({
         Url = url,
         Method = "GET",
         Headers = { ["Content-Type"] = "application/json" },
     })
-
     if not res then
         self.lastError = err or "Request failed"
         return nil, self.lastError
     end
-
     local code = res.StatusCode or res.Status or 0
     local body = res.Body or res.body or ""
-
     if code == 400 or code == 403 then
         local msg = "Invalid or restricted API key"
         pcall(function()
             local data = HttpService:JSONDecode(body)
-            if data and data.error and data.error.message then
-                msg = data.error.message
-            end
+            if data and data.error and data.error.message then msg = data.error.message end
         end)
         self.lastError = msg
         self.connected = false
@@ -112,24 +104,20 @@ function YouTubeAPI:_request(path, query)
         self.lastError = "HTTP " .. tostring(code)
         return nil, self.lastError
     end
-
     local ok, data = pcall(function() return HttpService:JSONDecode(body) end)
     if not ok then
         self.lastError = "Failed to parse response"
         return nil, self.lastError
     end
-
     if data.error then
-        self.lastError = (data.error.message) or "API error"
+        self.lastError = data.error.message or "API error"
         return nil, self.lastError
     end
-
     self.lastError = nil
     return data, nil
 end
 
 function YouTubeAPI:validate()
-    -- Lightweight call to verify the key works
     local data, err = self:_request("/search", "part=snippet&type=video&maxResults=1&q=test")
     if not data then
         self.connected = false
@@ -140,41 +128,75 @@ function YouTubeAPI:validate()
 end
 
 function YouTubeAPI:search(query, maxResults)
-    if not query or query == "" then
-        return nil, "Empty search query"
-    end
+    if not query or query == "" then return nil, "Empty search query" end
     maxResults = math.clamp(tonumber(maxResults) or 10, 1, 25)
     local q = HttpService:UrlEncode(query)
     return self:_request("/search", "part=snippet&type=video&maxResults=" .. maxResults .. "&q=" .. q)
 end
 
 function YouTubeAPI:getVideoDetails(videoId)
-    if not videoId or videoId == "" then
-        return nil, "Missing video id"
-    end
+    if not videoId or videoId == "" then return nil, "Missing video id" end
     return self:_request("/videos", "part=snippet,contentDetails,statistics&id=" .. videoId)
 end
 
+function YouTubeAPI.extractVideoId(input)
+    if type(input) ~= "string" then return nil end
+    input = input:match("^%s*(.-)%s*$") or ""
+    if input == "" then return nil end
+    if input:match("^[%w%-_]{11}$") then return input end
+    local patterns = {
+        "youtube%.com/watch%?.*v=([%w%-_]{11})",
+        "youtu%.be/([%w%-_]{11})",
+        "youtube%.com/embed/([%w%-_]{11})",
+        "youtube%.com/shorts/([%w%-_]{11})",
+        "youtube%.com/v/([%w%-_]{11})",
+        "youtube%.com/live/([%w%-_]{11})",
+        "music%.youtube%.com/watch%?.*v=([%w%-_]{11})",
+    }
+    for _, pat in ipairs(patterns) do
+        local id = input:match(pat)
+        if id then return id end
+    end
+    return nil
+end
+
+function YouTubeAPI.fetchOEmbed(videoId)
+    if not videoId then return nil, "Missing video id" end
+    local watch = "https://www.youtube.com/watch?v=" .. videoId
+    local url = "https://www.youtube.com/oembed?url=" .. HttpService:UrlEncode(watch) .. "&format=json"
+    local res, err = httpRequest({ Url = url, Method = "GET" })
+    if not res then return nil, err or "oEmbed request failed" end
+    local code = res.StatusCode or res.Status or 0
+    local body = res.Body or res.body or ""
+    if code < 200 or code >= 300 then
+        return nil, "Invalid or unavailable video"
+    end
+    local ok, data = pcall(function() return HttpService:JSONDecode(body) end)
+    if not ok or not data then return nil, "Failed to parse video info" end
+    return data, nil
+end
+
 function YouTubeAPI.formatDuration(iso)
-    -- PT#H#M#S → h:mm:ss or m:ss
     if type(iso) ~= "string" then return "" end
     local h = tonumber(iso:match("(%d+)H")) or 0
     local m = tonumber(iso:match("(%d+)M")) or 0
     local s = tonumber(iso:match("(%d+)S")) or 0
-    if h > 0 then
-        return string.format("%d:%02d:%02d", h, m, s)
-    end
+    if h > 0 then return string.format("%d:%02d:%02d", h, m, s) end
     return string.format("%d:%02d", m, s)
 end
 
 function YouTubeAPI.bestThumbnail(snippet)
     if not snippet or not snippet.thumbnails then return nil end
     local t = snippet.thumbnails
-    local order = { "medium", "high", "default", "standard", "maxres" }
-    for _, k in ipairs(order) do
+    for _, k in ipairs({ "medium", "high", "default", "standard", "maxres" }) do
         if t[k] and t[k].url then return t[k].url end
     end
     return nil
+end
+
+function YouTubeAPI.thumbnailForId(videoId)
+    if not videoId then return nil end
+    return "https://i.ytimg.com/vi/" .. videoId .. "/hqdefault.jpg"
 end
 
 return YouTubeAPI
