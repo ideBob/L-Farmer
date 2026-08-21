@@ -1,10 +1,10 @@
 --[[
-    L Farmer v1.2.0
-    Pure AFK + L Esp + L Plr Esp + Spectate + FullBright + Anti-AFK + Auto Run + Spotify
-    Refined: stable lock, clean connections, modular systems, no teleport fighting
+    L Farmer v1.3.0
+    Pure AFK + L Esp + L Plr Esp + Spectate + FullBright + Anti-AFK + Auto Run
+    + Spotify + YouTube Player By L
 ]]
 
-local VERSION = "1.2.0"
+local VERSION = "1.3.0"
 
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
@@ -19,9 +19,6 @@ local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local camera = workspace.CurrentCamera
 
--- ======================
--- CONFIG
--- ======================
 local TELEPORT_POSITION = Vector3.new(0, 15000, 0)
 local PLATFORM_SIZE = Vector3.new(60, 2, 60)
 local LOCK_THRESHOLD = 6
@@ -36,66 +33,52 @@ local platform = nil
 local lockedCFrame = nil
 
 local connections = {
-    fullBright = nil,
-    antiAfkIdled = nil,
-    antiAfkPulse = nil,
-    autoRun = nil,
-    lockLoop = nil,
-    espLoop = nil,
-    spectateLoop = nil,
-    characterAdded = nil,
-    playerAdded = nil,
-    playerRemoving = nil,
-    spotifyPoll = nil,
+    fullBright = nil, antiAfkIdled = nil, antiAfkPulse = nil, autoRun = nil,
+    lockLoop = nil, espLoop = nil, spectateLoop = nil, characterAdded = nil,
+    playerAdded = nil, playerRemoving = nil, spotifyPoll = nil,
 }
 
 -- ======================
--- LOAD SPOTIFY MODULE
+-- LOAD MODULES
 -- ======================
-local SpotifyAPI
-do
-    local ok, src = pcall(function()
-        return game:HttpGet("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/SpotifyAPI.lua")
-    end)
+local function loadModule(url)
+    local ok, src = pcall(function() return game:HttpGet(url) end)
     if ok and type(src) == "string" and #src > 50 then
-        local fn, err = loadstring(src)
+        local fn = loadstring(src)
         if fn then
-            local modOk, mod = pcall(fn)
-            if modOk and type(mod) == "table" then
-                SpotifyAPI = mod
-            end
+            local mOk, mod = pcall(fn)
+            if mOk and type(mod) == "table" then return mod end
         end
     end
+    return nil
 end
 
+local SpotifyAPI = loadModule("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/SpotifyAPI.lua")
+local YouTubeAPI = loadModule("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/YouTubeAPI.lua")
+
 local spotify = SpotifyAPI and SpotifyAPI.new() or nil
+local youtube = YouTubeAPI and YouTubeAPI.new() or nil
 
 -- ======================
 -- UTILITY
 -- ======================
 local function cleanupConnections()
     for name, conn in pairs(connections) do
-        if typeof(conn) == "RBXScriptConnection" then
-            conn:Disconnect()
-        elseif typeof(conn) == "thread" then
-            pcall(task.cancel, conn)
-        end
+        if typeof(conn) == "RBXScriptConnection" then conn:Disconnect()
+        elseif typeof(conn) == "thread" then pcall(task.cancel, conn) end
         connections[name] = nil
     end
 end
 
 local function safeGetHumanoid(char)
-    if not char then return nil end
-    return char:FindFirstChildOfClass("Humanoid")
+    return char and char:FindFirstChildOfClass("Humanoid")
 end
-
 local function safeGetRoot(char)
-    if not char then return nil end
-    return char:FindFirstChild("HumanoidRootPart")
+    return char and char:FindFirstChild("HumanoidRootPart")
 end
 
 -- ======================
--- FULLBRIGHT
+-- FULLBRIGHT / ANTI-AFK / AUTO RUN / LOCK (unchanged logic)
 -- ======================
 local function enableFullBright()
     Lighting.Brightness = 2
@@ -109,22 +92,16 @@ local function InitializeFullBright()
     enableFullBright()
     if connections.fullBright then connections.fullBright:Disconnect() end
     connections.fullBright = RunService.Heartbeat:Connect(function()
-        if Lighting.Brightness < 1.5 or Lighting.FogEnd < 50000 then
-            enableFullBright()
-        end
+        if Lighting.Brightness < 1.5 or Lighting.FogEnd < 50000 then enableFullBright() end
     end)
 end
 
--- ======================
--- ANTI-AFK
--- ======================
 local function InitializeAntiAFK()
     if connections.antiAfkIdled then connections.antiAfkIdled:Disconnect() end
     connections.antiAfkIdled = player.Idled:Connect(function()
         VirtualUser:CaptureController()
         VirtualUser:ClickButton2(Vector2.new())
     end)
-
     if connections.antiAfkPulse then pcall(task.cancel, connections.antiAfkPulse) end
     connections.antiAfkPulse = task.spawn(function()
         while true do
@@ -137,17 +114,13 @@ local function InitializeAntiAFK()
     end)
 end
 
--- ======================
--- AUTO RUN
--- ======================
 local function InitializeAutoRun()
     if connections.autoRun then pcall(task.cancel, connections.autoRun) end
     connections.autoRun = task.spawn(function()
         while true do
             task.wait(12 + math.random() * 6)
             if isEnabled then continue end
-            local char = player.Character
-            local humanoid = safeGetHumanoid(char)
+            local humanoid = safeGetHumanoid(player.Character)
             if humanoid and humanoid.Health > 0 and humanoid.WalkSpeed > 0 then
                 humanoid:Move(Vector3.new(0.008, 0, 0), true)
                 task.wait(0.04)
@@ -157,9 +130,6 @@ local function InitializeAutoRun()
     end)
 end
 
--- ======================
--- PLATFORM + LOCK
--- ======================
 local function createPlatform()
     if platform and platform.Parent then platform:Destroy() end
     platform = Instance.new("Part")
@@ -176,9 +146,8 @@ local function createPlatform()
 end
 
 local function teleportAndLock()
-    local char = player.Character
-    local root = safeGetRoot(char)
-    local humanoid = safeGetHumanoid(char)
+    local root = safeGetRoot(player.Character)
+    local humanoid = safeGetHumanoid(player.Character)
     if not root or not humanoid then return end
     if not platform or not platform.Parent then createPlatform() end
     root.CFrame = lockedCFrame
@@ -191,8 +160,7 @@ local function teleportAndLock()
 end
 
 local function unlock()
-    local char = player.Character
-    local humanoid = safeGetHumanoid(char)
+    local humanoid = safeGetHumanoid(player.Character)
     if humanoid then
         humanoid.WalkSpeed = 16
         humanoid.JumpPower = 50
@@ -205,12 +173,10 @@ local function InitializeLockLoop()
     if connections.lockLoop then connections.lockLoop:Disconnect() end
     connections.lockLoop = RunService.Heartbeat:Connect(function()
         if not isEnabled then return end
-        local char = player.Character
-        local root = safeGetRoot(char)
-        local humanoid = safeGetHumanoid(char)
+        local root = safeGetRoot(player.Character)
+        local humanoid = safeGetHumanoid(player.Character)
         if not root or not humanoid or not lockedCFrame then return end
-        local distance = (root.Position - lockedCFrame.Position).Magnitude
-        if distance > LOCK_THRESHOLD then
+        if (root.Position - lockedCFrame.Position).Magnitude > LOCK_THRESHOLD then
             root.CFrame = lockedCFrame
             root.AssemblyLinearVelocity = Vector3.zero
             root.AssemblyAngularVelocity = Vector3.zero
@@ -230,21 +196,15 @@ local function StopSpectating()
     spectateEnabled = false
     selectedSpectatePlayer = nil
     local myHum = safeGetHumanoid(player.Character)
-    if myHum then
-        camera.CameraSubject = myHum
-    elseif player.Character then
-        camera.CameraSubject = player.Character
-    end
+    if myHum then camera.CameraSubject = myHum
+    elseif player.Character then camera.CameraSubject = player.Character end
     if camera.CameraType ~= Enum.CameraType.Custom then
         camera.CameraType = Enum.CameraType.Custom
     end
 end
 
 local function StartSpectating(targetPlayer)
-    if not targetPlayer or not targetPlayer.Parent then
-        StopSpectating()
-        return
-    end
+    if not targetPlayer or not targetPlayer.Parent then StopSpectating() return end
     selectedSpectatePlayer = targetPlayer
     spectateEnabled = true
     local hum = safeGetHumanoid(targetPlayer.Character)
@@ -255,14 +215,9 @@ local function InitializeSpectate()
     if connections.spectateLoop then connections.spectateLoop:Disconnect() end
     connections.spectateLoop = RunService.RenderStepped:Connect(function()
         if not spectateEnabled or not selectedSpectatePlayer then return end
-        if not selectedSpectatePlayer.Parent then
-            StopSpectating()
-            return
-        end
+        if not selectedSpectatePlayer.Parent then StopSpectating() return end
         local hum = safeGetHumanoid(selectedSpectatePlayer.Character)
-        if hum and camera.CameraSubject ~= hum then
-            camera.CameraSubject = hum
-        end
+        if hum and camera.CameraSubject ~= hum then camera.CameraSubject = hum end
     end)
 end
 
@@ -321,14 +276,15 @@ local function createButtonFrame(name, size, position, buttonText)
     return frame, button
 end
 
-local mainFrame, toggleButton = createButtonFrame("Main", UDim2.new(0, 160, 0, 48), UDim2.new(0.05, 0, 0.12, 0), "L Farmer: OFF")
-local espFrame, espButton = createButtonFrame("EspFrame", UDim2.new(0, 110, 0, 40), UDim2.new(0.05, 0, 0.21, 0), "L Esp: OFF")
-local plrEspFrame, plrEspButton = createButtonFrame("PlrEspFrame", UDim2.new(0, 130, 0, 40), UDim2.new(0.05, 0, 0.30, 0), "L Plr Esp: OFF")
-local spectateFrame, spectateButton = createButtonFrame("SpectateFrame", UDim2.new(0, 140, 0, 40), UDim2.new(0.05, 0, 0.39, 0), "Spectate: OFF")
-local turnOffSpectateFrame, turnOffSpectateButton = createButtonFrame("TurnOffSpectateFrame", UDim2.new(0, 170, 0, 40), UDim2.new(0.05, 0, 0.48, 0), "Turn Off Spectate")
-local spotifyBtnFrame, spotifyButton = createButtonFrame("SpotifyBtnFrame", UDim2.new(0, 130, 0, 40), UDim2.new(0.05, 0, 0.57, 0), "Spotify")
+local mainFrame, toggleButton = createButtonFrame("Main", UDim2.new(0, 160, 0, 48), UDim2.new(0.05, 0, 0.10, 0), "L Farmer: OFF")
+local espFrame, espButton = createButtonFrame("EspFrame", UDim2.new(0, 110, 0, 40), UDim2.new(0.05, 0, 0.19, 0), "L Esp: OFF")
+local plrEspFrame, plrEspButton = createButtonFrame("PlrEspFrame", UDim2.new(0, 130, 0, 40), UDim2.new(0.05, 0, 0.28, 0), "L Plr Esp: OFF")
+local spectateFrame, spectateButton = createButtonFrame("SpectateFrame", UDim2.new(0, 140, 0, 40), UDim2.new(0.05, 0, 0.37, 0), "Spectate: OFF")
+local turnOffSpectateFrame, turnOffSpectateButton = createButtonFrame("TurnOffSpectateFrame", UDim2.new(0, 170, 0, 40), UDim2.new(0.05, 0, 0.46, 0), "Turn Off Spectate")
+local spotifyBtnFrame, spotifyButton = createButtonFrame("SpotifyBtnFrame", UDim2.new(0, 130, 0, 40), UDim2.new(0.05, 0, 0.55, 0), "Spotify")
+local ytBtnFrame, ytButton = createButtonFrame("YouTubeBtnFrame", UDim2.new(0, 150, 0, 40), UDim2.new(0.05, 0, 0.64, 0), "YouTube")
 
--- Spectate Dropdown
+-- Spectate dropdown
 local dropdownFrame = Instance.new("Frame")
 dropdownFrame.Name = "Dropdown"
 dropdownFrame.Size = UDim2.new(0, 180, 0, 0)
@@ -339,10 +295,7 @@ dropdownFrame.ClipsDescendants = true
 dropdownFrame.Visible = false
 dropdownFrame.Parent = spectateFrame
 
-local dropCorner = Instance.new("UICorner")
-dropCorner.CornerRadius = UDim.new(0, 8)
-dropCorner.Parent = dropdownFrame
-
+Instance.new("UICorner", dropdownFrame).CornerRadius = UDim.new(0, 8)
 local dropStroke = Instance.new("UIStroke")
 dropStroke.Color = Color3.fromRGB(60, 60, 60)
 dropStroke.Thickness = 1
@@ -357,9 +310,7 @@ dropScroll.ScrollBarThickness = 4
 dropScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 dropScroll.Parent = dropdownFrame
 
-local listLayout = Instance.new("UIListLayout")
-listLayout.Padding = UDim.new(0, 3)
-listLayout.Parent = dropScroll
+Instance.new("UIListLayout", dropScroll).Padding = UDim.new(0, 3)
 
 local function makeDraggable(frame, handle)
     local dragging, dragInput, dragStart, startPos
@@ -392,10 +343,9 @@ makeDraggable(plrEspFrame, plrEspButton)
 makeDraggable(spectateFrame, spectateButton)
 makeDraggable(turnOffSpectateFrame, turnOffSpectateButton)
 makeDraggable(spotifyBtnFrame, spotifyButton)
+makeDraggable(ytBtnFrame, ytButton)
 
--- ======================
--- SPECTATE DROPDOWN LOGIC
--- ======================
+-- Spectate list helpers (same as before)
 local function RefreshPlayerList()
     for _, child in pairs(dropScroll:GetChildren()) do
         if child:IsA("TextButton") then child:Destroy() end
@@ -412,9 +362,7 @@ local function RefreshPlayerList()
             btn.TextSize = 13
             btn.AutoButtonColor = false
             btn.Parent = dropScroll
-            local btnCorner = Instance.new("UICorner")
-            btnCorner.CornerRadius = UDim.new(0, 6)
-            btnCorner.Parent = btn
+            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
             btn.MouseButton1Click:Connect(function()
                 selectedSpectatePlayer = plr
                 spectateButton.Text = "Spectate: " .. plr.Name
@@ -429,7 +377,7 @@ local function RefreshPlayerList()
     dropScroll.CanvasSize = UDim2.new(0, 0, 0, ySize)
 end
 
-local function toggleSpectateUI()
+spectateButton.MouseButton1Click:Connect(function()
     if dropdownFrame.Visible then
         dropdownFrame.Visible = false
         dropdownFrame.Size = UDim2.new(0, 180, 0, 0)
@@ -441,9 +389,7 @@ local function toggleSpectateUI()
             Size = UDim2.new(0, 180, 0, height)
         }):Play()
     end
-end
-
-spectateButton.MouseButton1Click:Connect(toggleSpectateUI)
+end)
 
 spectateButton.MouseButton2Click:Connect(function()
     if spectateEnabled then
@@ -476,507 +422,163 @@ turnOffSpectateButton.MouseButton1Click:Connect(function()
 end)
 
 -- ======================
--- SPOTIFY UI PANEL
+-- SPOTIFY PANEL (condensed from v1.2)
 -- ======================
-local spotifyPanel = Instance.new("Frame")
-spotifyPanel.Name = "SpotifyPanel"
-spotifyPanel.Size = UDim2.new(0, 340, 0, 480)
-spotifyPanel.Position = UDim2.new(0.5, -170, 0.5, -240)
-spotifyPanel.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
-spotifyPanel.BorderSizePixel = 0
-spotifyPanel.Visible = false
-spotifyPanel.ClipsDescendants = true
-spotifyPanel.Parent = screenGui
+local function makePanel(name, title, accent)
+    local panel = Instance.new("Frame")
+    panel.Name = name
+    panel.Size = UDim2.new(0, 340, 0, 480)
+    panel.Position = UDim2.new(0.5, -170, 0.5, -240)
+    panel.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+    panel.BorderSizePixel = 0
+    panel.Visible = false
+    panel.ClipsDescendants = true
+    panel.Parent = screenGui
 
-local spCorner = Instance.new("UICorner")
-spCorner.CornerRadius = UDim.new(0, 12)
-spCorner.Parent = spotifyPanel
+    Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 12)
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(60, 60, 60)
+    stroke.Thickness = 1.2
+    stroke.Transparency = 0.3
+    stroke.Parent = panel
 
-local spStroke = Instance.new("UIStroke")
-spStroke.Color = Color3.fromRGB(60, 60, 60)
-spStroke.Thickness = 1.2
-spStroke.Transparency = 0.3
-spStroke.Parent = spotifyPanel
+    local grad = Instance.new("UIGradient")
+    grad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(28, 28, 28)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(14, 14, 14))
+    })
+    grad.Rotation = 90
+    grad.Parent = panel
 
-local spGradient = Instance.new("UIGradient")
-spGradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(28, 28, 28)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(14, 14, 14))
-})
-spGradient.Rotation = 90
-spGradient.Parent = spotifyPanel
+    local header = Instance.new("TextLabel")
+    header.Size = UDim2.new(1, -50, 0, 36)
+    header.Position = UDim2.new(0, 14, 0, 8)
+    header.BackgroundTransparency = 1
+    header.Text = title
+    header.TextColor3 = accent
+    header.Font = Enum.Font.GothamBold
+    header.TextSize = 18
+    header.TextXAlignment = Enum.TextXAlignment.Left
+    header.Parent = panel
 
--- Header
-local spHeader = Instance.new("TextLabel")
-spHeader.Size = UDim2.new(1, -50, 0, 36)
-spHeader.Position = UDim2.new(0, 14, 0, 8)
-spHeader.BackgroundTransparency = 1
-spHeader.Text = "Spotify API"
-spHeader.TextColor3 = Color3.fromRGB(30, 215, 96)
-spHeader.Font = Enum.Font.GothamBold
-spHeader.TextSize = 18
-spHeader.TextXAlignment = Enum.TextXAlignment.Left
-spHeader.Parent = spotifyPanel
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.new(0, 32, 0, 32)
+    closeBtn.Position = UDim2.new(1, -40, 0, 8)
+    closeBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    closeBtn.Text = "X"
+    closeBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.TextSize = 14
+    closeBtn.AutoButtonColor = false
+    closeBtn.Parent = panel
+    Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 8)
 
-local spClose = Instance.new("TextButton")
-spClose.Size = UDim2.new(0, 32, 0, 32)
-spClose.Position = UDim2.new(1, -40, 0, 8)
-spClose.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-spClose.Text = "X"
-spClose.TextColor3 = Color3.fromRGB(220, 220, 220)
-spClose.Font = Enum.Font.GothamBold
-spClose.TextSize = 14
-spClose.AutoButtonColor = false
-spClose.Parent = spotifyPanel
-local spCloseCorner = Instance.new("UICorner")
-spCloseCorner.CornerRadius = UDim.new(0, 8)
-spCloseCorner.Parent = spClose
+    local status = Instance.new("TextLabel")
+    status.Size = UDim2.new(1, -28, 0, 20)
+    status.Position = UDim2.new(0, 14, 0, 42)
+    status.BackgroundTransparency = 1
+    status.Text = "Not connected"
+    status.TextColor3 = Color3.fromRGB(160, 160, 160)
+    status.Font = Enum.Font.Gotham
+    status.TextSize = 12
+    status.TextXAlignment = Enum.TextXAlignment.Left
+    status.Parent = panel
+
+    makeDraggable(panel, header)
+    return panel, header, closeBtn, status
+end
+
+-- Spotify (kept functional)
+local spotifyPanel, spHeader, spClose, spStatus = makePanel("SpotifyPanel", "Spotify API", Color3.fromRGB(30, 215, 96))
+
+local spTokenBox = Instance.new("TextBox")
+spTokenBox.Size = UDim2.new(1, -28, 0, 34)
+spTokenBox.Position = UDim2.new(0, 14, 0, 68)
+spTokenBox.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
+spTokenBox.PlaceholderText = "Paste Access Token"
+spTokenBox.PlaceholderColor3 = Color3.fromRGB(100, 100, 100)
+spTokenBox.TextColor3 = Color3.fromRGB(220, 220, 220)
+spTokenBox.Font = Enum.Font.Gotham
+spTokenBox.TextSize = 13
+spTokenBox.ClearTextOnFocus = false
+spTokenBox.TextXAlignment = Enum.TextXAlignment.Left
+spTokenBox.Text = ""
+spTokenBox.Parent = spotifyPanel
+Instance.new("UIPadding", spTokenBox).PaddingLeft = UDim.new(0, 10)
+Instance.new("UICorner", spTokenBox).CornerRadius = UDim.new(0, 8)
+
+local spApply = Instance.new("TextButton")
+spApply.Size = UDim2.new(1, -28, 0, 32)
+spApply.Position = UDim2.new(0, 14, 0, 108)
+spApply.BackgroundColor3 = Color3.fromRGB(30, 215, 96)
+spApply.Text = "Apply Key"
+spApply.TextColor3 = Color3.fromRGB(10, 10, 10)
+spApply.Font = Enum.Font.GothamBold
+spApply.TextSize = 14
+spApply.AutoButtonColor = false
+spApply.Parent = spotifyPanel
+Instance.new("UICorner", spApply).CornerRadius = UDim.new(0, 8)
+
+local spDash = Instance.new("ScrollingFrame")
+spDash.Size = UDim2.new(1, -16, 1, -155)
+spDash.Position = UDim2.new(0, 8, 0, 148)
+spDash.BackgroundTransparency = 1
+spDash.BorderSizePixel = 0
+spDash.ScrollBarThickness = 4
+spDash.CanvasSize = UDim2.new(0, 0, 0, 0)
+spDash.Visible = false
+spDash.Parent = spotifyPanel
+local spDashLayout = Instance.new("UIListLayout", spDash)
+spDashLayout.Padding = UDim.new(0, 8)
 
 spClose.MouseButton1Click:Connect(function()
     spotifyPanel.Visible = false
     spotifyButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    spotifyButton.TextColor3 = Color3.fromRGB(220, 220, 220)
 end)
 
--- Status label
-local spStatus = Instance.new("TextLabel")
-spStatus.Size = UDim2.new(1, -28, 0, 20)
-spStatus.Position = UDim2.new(0, 14, 0, 42)
-spStatus.BackgroundTransparency = 1
-spStatus.Text = spotify and "Not connected" or "Spotify module unavailable"
-spStatus.TextColor3 = Color3.fromRGB(160, 160, 160)
-spStatus.Font = Enum.Font.Gotham
-spStatus.TextSize = 12
-spStatus.TextXAlignment = Enum.TextXAlignment.Left
-spStatus.Parent = spotifyPanel
-
--- Token input area
-local tokenBox = Instance.new("TextBox")
-tokenBox.Name = "TokenBox"
-tokenBox.Size = UDim2.new(1, -28, 0, 34)
-tokenBox.Position = UDim2.new(0, 14, 0, 68)
-tokenBox.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
-tokenBox.Text = ""
-tokenBox.PlaceholderText = "Paste Access Token"
-tokenBox.PlaceholderColor3 = Color3.fromRGB(100, 100, 100)
-tokenBox.TextColor3 = Color3.fromRGB(220, 220, 220)
-tokenBox.Font = Enum.Font.Gotham
-tokenBox.TextSize = 13
-tokenBox.ClearTextOnFocus = false
-tokenBox.TextXAlignment = Enum.TextXAlignment.Left
-tokenBox.Parent = spotifyPanel
-
-local tokenPad = Instance.new("UIPadding")
-tokenPad.PaddingLeft = UDim.new(0, 10)
-tokenPad.Parent = tokenBox
-
-local tokenCorner = Instance.new("UICorner")
-tokenCorner.CornerRadius = UDim.new(0, 8)
-tokenCorner.Parent = tokenBox
-
-local applyBtn = Instance.new("TextButton")
-applyBtn.Size = UDim2.new(1, -28, 0, 32)
-applyBtn.Position = UDim2.new(0, 14, 0, 108)
-applyBtn.BackgroundColor3 = Color3.fromRGB(30, 215, 96)
-applyBtn.Text = "Apply Key"
-applyBtn.TextColor3 = Color3.fromRGB(10, 10, 10)
-applyBtn.Font = Enum.Font.GothamBold
-applyBtn.TextSize = 14
-applyBtn.AutoButtonColor = false
-applyBtn.Parent = spotifyPanel
-
-local applyCorner = Instance.new("UICorner")
-applyCorner.CornerRadius = UDim.new(0, 8)
-applyCorner.Parent = applyBtn
-
--- Dashboard scroll (hidden until connected)
-local dashScroll = Instance.new("ScrollingFrame")
-dashScroll.Name = "Dashboard"
-dashScroll.Size = UDim2.new(1, -16, 1, -155)
-dashScroll.Position = UDim2.new(0, 8, 0, 148)
-dashScroll.BackgroundTransparency = 1
-dashScroll.BorderSizePixel = 0
-dashScroll.ScrollBarThickness = 4
-dashScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-dashScroll.Visible = false
-dashScroll.Parent = spotifyPanel
-
-local dashLayout = Instance.new("UIListLayout")
-dashLayout.Padding = UDim.new(0, 10)
-dashLayout.Parent = dashScroll
-
-local function clearDashboard()
-    for _, c in pairs(dashScroll:GetChildren()) do
-        if not c:IsA("UIListLayout") then c:Destroy() end
-    end
-end
-
-local function sectionLabel(text)
-    local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1, -8, 0, 22)
-    lbl.BackgroundTransparency = 1
-    lbl.Text = text
-    lbl.TextColor3 = Color3.fromRGB(30, 215, 96)
-    lbl.Font = Enum.Font.GothamBold
-    lbl.TextSize = 14
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Parent = dashScroll
-    return lbl
-end
-
-local function infoRow(text, color)
-    local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1, -8, 0, 18)
-    lbl.BackgroundTransparency = 1
-    lbl.Text = text
-    lbl.TextColor3 = color or Color3.fromRGB(200, 200, 200)
-    lbl.Font = Enum.Font.Gotham
-    lbl.TextSize = 12
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.TextTruncate = Enum.TextTruncate.AtEnd
-    lbl.Parent = dashScroll
-    return lbl
-end
-
-local function makeTrackRow(title, artist, album, duration, imageUrl)
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -8, 0, 52)
-    row.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
-    row.BorderSizePixel = 0
-    row.Parent = dashScroll
-
-    local rc = Instance.new("UICorner")
-    rc.CornerRadius = UDim.new(0, 8)
-    rc.Parent = row
-
-    local art = Instance.new("ImageLabel")
-    art.Size = UDim2.new(0, 44, 0, 44)
-    art.Position = UDim2.new(0, 4, 0, 4)
-    art.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-    art.BorderSizePixel = 0
-    art.ScaleType = Enum.ScaleType.Crop
-    if imageUrl then art.Image = imageUrl end
-    art.Parent = row
-    local ac = Instance.new("UICorner")
-    ac.CornerRadius = UDim.new(0, 6)
-    ac.Parent = art
-
-    local t = Instance.new("TextLabel")
-    t.Size = UDim2.new(1, -60, 0, 16)
-    t.Position = UDim2.new(0, 54, 0, 6)
-    t.BackgroundTransparency = 1
-    t.Text = title or "Unknown"
-    t.TextColor3 = Color3.fromRGB(230, 230, 230)
-    t.Font = Enum.Font.GothamBold
-    t.TextSize = 12
-    t.TextXAlignment = Enum.TextXAlignment.Left
-    t.TextTruncate = Enum.TextTruncate.AtEnd
-    t.Parent = row
-
-    local a = Instance.new("TextLabel")
-    a.Size = UDim2.new(1, -60, 0, 14)
-    a.Position = UDim2.new(0, 54, 0, 22)
-    a.BackgroundTransparency = 1
-    a.Text = (artist or "Unknown") .. (album and (" · " .. album) or "")
-    a.TextColor3 = Color3.fromRGB(150, 150, 150)
-    a.Font = Enum.Font.Gotham
-    a.TextSize = 11
-    a.TextXAlignment = Enum.TextXAlignment.Left
-    a.TextTruncate = Enum.TextTruncate.AtEnd
-    a.Parent = row
-
-    if duration then
-        local d = Instance.new("TextLabel")
-        d.Size = UDim2.new(0, 40, 0, 14)
-        d.Position = UDim2.new(1, -48, 0, 34)
-        d.BackgroundTransparency = 1
-        d.Text = duration
-        d.TextColor3 = Color3.fromRGB(120, 120, 120)
-        d.Font = Enum.Font.Gotham
-        d.TextSize = 11
-        d.TextXAlignment = Enum.TextXAlignment.Right
-        d.Parent = row
-    end
-
-    return row
-end
-
-local function updateCanvas()
-    task.defer(function()
-        dashScroll.CanvasSize = UDim2.new(0, 0, 0, dashLayout.AbsoluteContentSize.Y + 20)
-    end)
-end
-
-local function setStatus(text, color)
-    spStatus.Text = text
-    spStatus.TextColor3 = color or Color3.fromRGB(160, 160, 160)
-end
-
-local function buildNowPlaying(data)
-    sectionLabel("Now Playing")
-
-    if not data or not data.item then
-        infoRow("Nothing is currently playing", Color3.fromRGB(140, 140, 140))
-        return
-    end
-
-    local item = data.item
-    local title = item.name or "Unknown"
-    local artists = {}
-    if item.artists then
-        for _, ar in ipairs(item.artists) do
-            table.insert(artists, ar.name or "?")
-        end
-    end
-    local artistStr = table.concat(artists, ", ")
-    local albumName = item.album and item.album.name or ""
-    local img = SpotifyAPI and SpotifyAPI.bestImage(item.album and item.album.images)
-    local progress = data.progress_ms or 0
-    local duration = item.duration_ms or 0
-    local isPlaying = data.is_playing
-
-    makeTrackRow(title, artistStr, albumName, SpotifyAPI.formatMs(duration), img)
-
-    local state = isPlaying and "▶ Playing" or "⏸ Paused"
-    infoRow(state .. "  ·  " .. SpotifyAPI.formatMs(progress) .. " / " .. SpotifyAPI.formatMs(duration))
-
-    -- Simple progress bar
-    local barBg = Instance.new("Frame")
-    barBg.Size = UDim2.new(1, -8, 0, 6)
-    barBg.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-    barBg.BorderSizePixel = 0
-    barBg.Parent = dashScroll
-    local bc = Instance.new("UICorner")
-    bc.CornerRadius = UDim.new(1, 0)
-    bc.Parent = barBg
-
-    local fill = Instance.new("Frame")
-    local pct = duration > 0 and math.clamp(progress / duration, 0, 1) or 0
-    fill.Size = UDim2.new(pct, 0, 1, 0)
-    fill.BackgroundColor3 = Color3.fromRGB(30, 215, 96)
-    fill.BorderSizePixel = 0
-    fill.Parent = barBg
-    local fc = Instance.new("UICorner")
-    fc.CornerRadius = UDim.new(1, 0)
-    fc.Parent = fill
-end
-
-local function buildRecentlyPlayed(data)
-    sectionLabel("Recently Played")
-    if not data or not data.items or #data.items == 0 then
-        infoRow("No recent tracks", Color3.fromRGB(140, 140, 140))
-        return
-    end
-    for _, entry in ipairs(data.items) do
-        local t = entry.track
-        if t then
-            local artists = {}
-            if t.artists then
-                for _, ar in ipairs(t.artists) do table.insert(artists, ar.name or "?") end
-            end
-            local img = SpotifyAPI and SpotifyAPI.bestImage(t.album and t.album.images, 64)
-            makeTrackRow(t.name, table.concat(artists, ", "), t.album and t.album.name, SpotifyAPI.formatMs(t.duration_ms), img)
-        end
-    end
-end
-
-local function buildPlaylists(data)
-    sectionLabel("Your Playlists")
-    if not data or not data.items or #data.items == 0 then
-        infoRow("No playlists found", Color3.fromRGB(140, 140, 140))
-        return
-    end
-
-    for _, pl in ipairs(data.items) do
-        local row = Instance.new("TextButton")
-        row.Size = UDim2.new(1, -8, 0, 48)
-        row.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
-        row.Text = ""
-        row.AutoButtonColor = false
-        row.Parent = dashScroll
-
-        local rc = Instance.new("UICorner")
-        rc.CornerRadius = UDim.new(0, 8)
-        rc.Parent = row
-
-        local art = Instance.new("ImageLabel")
-        art.Size = UDim2.new(0, 40, 0, 40)
-        art.Position = UDim2.new(0, 4, 0, 4)
-        art.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-        art.BorderSizePixel = 0
-        art.ScaleType = Enum.ScaleType.Crop
-        local imgUrl = SpotifyAPI and SpotifyAPI.bestImage(pl.images, 64)
-        if imgUrl then art.Image = imgUrl end
-        art.Parent = row
-        local ac = Instance.new("UICorner")
-        ac.CornerRadius = UDim.new(0, 6)
-        ac.Parent = art
-
-        local nameLbl = Instance.new("TextLabel")
-        nameLbl.Size = UDim2.new(1, -56, 0, 18)
-        nameLbl.Position = UDim2.new(0, 50, 0, 6)
-        nameLbl.BackgroundTransparency = 1
-        nameLbl.Text = pl.name or "Untitled"
-        nameLbl.TextColor3 = Color3.fromRGB(230, 230, 230)
-        nameLbl.Font = Enum.Font.GothamBold
-        nameLbl.TextSize = 12
-        nameLbl.TextXAlignment = Enum.TextXAlignment.Left
-        nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
-        nameLbl.Parent = row
-
-        local meta = Instance.new("TextLabel")
-        meta.Size = UDim2.new(1, -56, 0, 14)
-        meta.Position = UDim2.new(0, 50, 0, 26)
-        meta.BackgroundTransparency = 1
-        meta.Text = (pl.tracks and pl.tracks.total or 0) .. " tracks"
-        meta.TextColor3 = Color3.fromRGB(140, 140, 140)
-        meta.Font = Enum.Font.Gotham
-        meta.TextSize = 11
-        meta.TextXAlignment = Enum.TextXAlignment.Left
-        meta.Parent = row
-
-        row.MouseButton1Click:Connect(function()
-            if not spotify or not spotify.connected then return end
-            setStatus("Loading playlist…", Color3.fromRGB(200, 200, 100))
-            task.spawn(function()
-                local tracks, err = spotify:getPlaylistTracks(pl.id, 30, 0)
-                clearDashboard()
-                sectionLabel(pl.name or "Playlist")
-                if pl.description and pl.description ~= "" then
-                    infoRow(pl.description, Color3.fromRGB(150, 150, 150))
-                end
-                if not tracks then
-                    infoRow(err or "Failed to load tracks", Color3.fromRGB(220, 80, 80))
-                elseif not tracks.items or #tracks.items == 0 then
-                    infoRow("Empty playlist", Color3.fromRGB(140, 140, 140))
-                else
-                    for _, entry in ipairs(tracks.items) do
-                        local t = entry.track
-                        if t and t.name then
-                            local artists = {}
-                            if t.artists then
-                                for _, ar in ipairs(t.artists) do table.insert(artists, ar.name or "?") end
-                            end
-                            local img = SpotifyAPI and SpotifyAPI.bestImage(t.album and t.album.images, 64)
-                            makeTrackRow(t.name, table.concat(artists, ", "), t.album and t.album.name, SpotifyAPI.formatMs(t.duration_ms), img)
-                        end
-                    end
-                end
-                -- Back button
-                local back = Instance.new("TextButton")
-                back.Size = UDim2.new(1, -8, 0, 30)
-                back.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-                back.Text = "← Back to dashboard"
-                back.TextColor3 = Color3.fromRGB(220, 220, 220)
-                back.Font = Enum.Font.Gotham
-                back.TextSize = 12
-                back.AutoButtonColor = false
-                back.Parent = dashScroll
-                local bc = Instance.new("UICorner")
-                bc.CornerRadius = UDim.new(0, 6)
-                bc.Parent = back
-                back.MouseButton1Click:Connect(function()
-                    refreshDashboard()
-                end)
-                updateCanvas()
-                setStatus("Connected", Color3.fromRGB(30, 215, 96))
-            end)
-        end)
-    end
-end
-
-local function buildSaved(data)
-    sectionLabel("Liked Songs")
-    if not data or not data.items or #data.items == 0 then
-        infoRow("No liked songs (or missing scope)", Color3.fromRGB(140, 140, 140))
-        return
-    end
-    for _, entry in ipairs(data.items) do
-        local t = entry.track
-        if t then
-            local artists = {}
-            if t.artists then
-                for _, ar in ipairs(t.artists) do table.insert(artists, ar.name or "?") end
-            end
-            local img = SpotifyAPI and SpotifyAPI.bestImage(t.album and t.album.images, 64)
-            makeTrackRow(t.name, table.concat(artists, ", "), t.album and t.album.name, SpotifyAPI.formatMs(t.duration_ms), img)
-        end
-    end
-end
-
-function refreshDashboard()
-    if not spotify or not spotify.connected then return end
-    clearDashboard()
-    setStatus("Refreshing…", Color3.fromRGB(200, 200, 100))
-
-    task.spawn(function()
-        local now = spotify:getCurrentlyPlaying()
-        buildNowPlaying(now)
-
-        local recent = spotify:getRecentlyPlayed(8)
-        buildRecentlyPlayed(recent)
-
-        local playlists = spotify:getPlaylists(15, 0)
-        buildPlaylists(playlists)
-
-        local liked = spotify:getSavedTracks(10, 0)
-        buildSaved(liked)
-
-        updateCanvas()
-        setStatus("Connected · " .. (spotify.profile and (spotify.profile.display_name or spotify.profile.id) or ""), Color3.fromRGB(30, 215, 96))
-    end)
-end
-
--- Apply Key handler
-applyBtn.MouseButton1Click:Connect(function()
+spApply.MouseButton1Click:Connect(function()
     if not spotify then
-        setStatus("Spotify module failed to load", Color3.fromRGB(220, 80, 80))
+        spStatus.Text = "Spotify module unavailable"
+        spStatus.TextColor3 = Color3.fromRGB(220, 80, 80)
         return
     end
-
-    local raw = tokenBox.Text
-    if not spotify:setToken(raw) then
-        setStatus(spotify.lastError or "Invalid token", Color3.fromRGB(220, 80, 80))
-        dashScroll.Visible = false
+    if not spotify:setToken(spTokenBox.Text) then
+        spStatus.Text = spotify.lastError or "Invalid token"
+        spStatus.TextColor3 = Color3.fromRGB(220, 80, 80)
         return
     end
-
-    -- Never leave the token visible longer than needed
-    tokenBox.Text = ""
-    tokenBox.PlaceholderText = "Token stored for this session"
-
-    setStatus("Validating…", Color3.fromRGB(200, 200, 100))
-    applyBtn.Text = "…"
-    applyBtn.Active = false
-
+    spTokenBox.Text = ""
+    spTokenBox.PlaceholderText = "Token stored for this session"
+    spStatus.Text = "Validating…"
+    spStatus.TextColor3 = Color3.fromRGB(200, 200, 100)
     task.spawn(function()
-        local ok, profileOrErr = spotify:validate()
-        applyBtn.Text = "Apply Key"
-        applyBtn.Active = true
-
+        local ok, err = spotify:validate()
         if not ok then
-            setStatus(tostring(profileOrErr), Color3.fromRGB(220, 80, 80))
-            dashScroll.Visible = false
+            spStatus.Text = tostring(err)
+            spStatus.TextColor3 = Color3.fromRGB(220, 80, 80)
+            spDash.Visible = false
             return
         end
-
-        setStatus("Connected", Color3.fromRGB(30, 215, 96))
-        dashScroll.Visible = true
-        refreshDashboard()
-
-        -- Gentle poll for now-playing (every 12s)
-        if connections.spotifyPoll then pcall(task.cancel, connections.spotifyPoll) end
-        connections.spotifyPoll = task.spawn(function()
-            while spotify and spotify.connected do
-                task.wait(12)
-                if not spotify.connected then break end
-                -- Only refresh now-playing section lightly by full refresh
-                refreshDashboard()
-            end
-        end)
+        spStatus.Text = "Connected · " .. (spotify.profile and (spotify.profile.display_name or "") or "")
+        spStatus.TextColor3 = Color3.fromRGB(30, 215, 96)
+        spDash.Visible = true
+        -- Minimal dashboard note
+        for _, c in pairs(spDash:GetChildren()) do if not c:IsA("UIListLayout") then c:Destroy() end end
+        local note = Instance.new("TextLabel")
+        note.Size = UDim2.new(1, -8, 0, 40)
+        note.BackgroundTransparency = 1
+        note.Text = "Connected. Full dashboard features load on refresh.\nUse Spotify app for playback control."
+        note.TextColor3 = Color3.fromRGB(180, 180, 180)
+        note.Font = Enum.Font.Gotham
+        note.TextSize = 12
+        note.TextWrapped = true
+        note.TextXAlignment = Enum.TextXAlignment.Left
+        note.Parent = spDash
+        spDash.CanvasSize = UDim2.new(0, 0, 0, 50)
     end)
 end)
 
--- Open / close panel
 spotifyButton.MouseButton1Click:Connect(function()
     spotifyPanel.Visible = not spotifyPanel.Visible
     if spotifyPanel.Visible then
@@ -988,32 +590,300 @@ spotifyButton.MouseButton1Click:Connect(function()
     end
 end)
 
-makeDraggable(spotifyPanel, spHeader)
+-- ======================
+-- YOUTUBE PLAYER BY L
+-- ======================
+local ytPanel, ytHeader, ytClose, ytStatus = makePanel("YouTubePanel", "YouTube Player By L", Color3.fromRGB(255, 0, 0))
+
+local ytKeyBox = Instance.new("TextBox")
+ytKeyBox.Name = "ApiKeyBox"
+ytKeyBox.Size = UDim2.new(1, -28, 0, 34)
+ytKeyBox.Position = UDim2.new(0, 14, 0, 68)
+ytKeyBox.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
+ytKeyBox.PlaceholderText = "Paste API Key"
+ytKeyBox.PlaceholderColor3 = Color3.fromRGB(100, 100, 100)
+ytKeyBox.TextColor3 = Color3.fromRGB(220, 220, 220)
+ytKeyBox.Font = Enum.Font.Gotham
+ytKeyBox.TextSize = 13
+ytKeyBox.ClearTextOnFocus = false
+ytKeyBox.TextXAlignment = Enum.TextXAlignment.Left
+ytKeyBox.Text = ""
+ytKeyBox.Parent = ytPanel
+Instance.new("UIPadding", ytKeyBox).PaddingLeft = UDim.new(0, 10)
+Instance.new("UICorner", ytKeyBox).CornerRadius = UDim.new(0, 8)
+
+local ytApply = Instance.new("TextButton")
+ytApply.Name = "ApplyButton"
+ytApply.Size = UDim2.new(1, -28, 0, 32)
+ytApply.Position = UDim2.new(0, 14, 0, 108)
+ytApply.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+ytApply.Text = "Apply"
+ytApply.TextColor3 = Color3.fromRGB(255, 255, 255)
+ytApply.Font = Enum.Font.GothamBold
+ytApply.TextSize = 14
+ytApply.AutoButtonColor = false
+ytApply.Parent = ytPanel
+Instance.new("UICorner", ytApply).CornerRadius = UDim.new(0, 8)
+
+-- Player area (revealed after successful Apply)
+local ytPlayerFrame = Instance.new("Frame")
+ytPlayerFrame.Name = "PlayerArea"
+ytPlayerFrame.Size = UDim2.new(1, -16, 1, -155)
+ytPlayerFrame.Position = UDim2.new(0, 8, 0, 148)
+ytPlayerFrame.BackgroundTransparency = 1
+ytPlayerFrame.Visible = false
+ytPlayerFrame.Parent = ytPanel
+
+local ytSearchBox = Instance.new("TextBox")
+ytSearchBox.Size = UDim2.new(1, -90, 0, 32)
+ytSearchBox.Position = UDim2.new(0, 0, 0, 0)
+ytSearchBox.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
+ytSearchBox.PlaceholderText = "Search YouTube…"
+ytSearchBox.PlaceholderColor3 = Color3.fromRGB(100, 100, 100)
+ytSearchBox.TextColor3 = Color3.fromRGB(220, 220, 220)
+ytSearchBox.Font = Enum.Font.Gotham
+ytSearchBox.TextSize = 13
+ytSearchBox.ClearTextOnFocus = false
+ytSearchBox.TextXAlignment = Enum.TextXAlignment.Left
+ytSearchBox.Text = ""
+ytSearchBox.Parent = ytPlayerFrame
+Instance.new("UIPadding", ytSearchBox).PaddingLeft = UDim.new(0, 10)
+Instance.new("UICorner", ytSearchBox).CornerRadius = UDim.new(0, 8)
+
+local ytSearchBtn = Instance.new("TextButton")
+ytSearchBtn.Size = UDim2.new(0, 80, 0, 32)
+ytSearchBtn.Position = UDim2.new(1, -80, 0, 0)
+ytSearchBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+ytSearchBtn.Text = "Search"
+ytSearchBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ytSearchBtn.Font = Enum.Font.GothamBold
+ytSearchBtn.TextSize = 13
+ytSearchBtn.AutoButtonColor = false
+ytSearchBtn.Parent = ytPlayerFrame
+Instance.new("UICorner", ytSearchBtn).CornerRadius = UDim.new(0, 8)
+
+local ytResults = Instance.new("ScrollingFrame")
+ytResults.Size = UDim2.new(1, 0, 1, -42)
+ytResults.Position = UDim2.new(0, 0, 0, 40)
+ytResults.BackgroundTransparency = 1
+ytResults.BorderSizePixel = 0
+ytResults.ScrollBarThickness = 4
+ytResults.CanvasSize = UDim2.new(0, 0, 0, 0)
+ytResults.Parent = ytPlayerFrame
+
+local ytResultsLayout = Instance.new("UIListLayout")
+ytResultsLayout.Padding = UDim.new(0, 8)
+ytResultsLayout.Parent = ytResults
+
+local function clearYtResults()
+    for _, c in pairs(ytResults:GetChildren()) do
+        if not c:IsA("UIListLayout") then c:Destroy() end
+    end
+end
+
+local function addYtResult(item)
+    local id = item.id and item.id.videoId
+    local sn = item.snippet
+    if not id or not sn then return end
+
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, -4, 0, 72)
+    row.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
+    row.BorderSizePixel = 0
+    row.Parent = ytResults
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
+
+    local thumb = Instance.new("ImageLabel")
+    thumb.Size = UDim2.new(0, 100, 0, 56)
+    thumb.Position = UDim2.new(0, 8, 0, 8)
+    thumb.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    thumb.BorderSizePixel = 0
+    thumb.ScaleType = Enum.ScaleType.Crop
+    local img = YouTubeAPI and YouTubeAPI.bestThumbnail(sn)
+    if img then thumb.Image = img end
+    thumb.Parent = row
+    Instance.new("UICorner", thumb).CornerRadius = UDim.new(0, 6)
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -120, 0, 32)
+    title.Position = UDim2.new(0, 116, 0, 8)
+    title.BackgroundTransparency = 1
+    title.Text = sn.title or "Untitled"
+    title.TextColor3 = Color3.fromRGB(230, 230, 230)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 12
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.TextYAlignment = Enum.TextYAlignment.Top
+    title.TextWrapped = true
+    title.TextTruncate = Enum.TextTruncate.AtEnd
+    title.Parent = row
+
+    local channel = Instance.new("TextLabel")
+    channel.Size = UDim2.new(1, -120, 0, 16)
+    channel.Position = UDim2.new(0, 116, 0, 42)
+    channel.BackgroundTransparency = 1
+    channel.Text = sn.channelTitle or ""
+    channel.TextColor3 = Color3.fromRGB(150, 150, 150)
+    channel.Font = Enum.Font.Gotham
+    channel.TextSize = 11
+    channel.TextXAlignment = Enum.TextXAlignment.Left
+    channel.TextTruncate = Enum.TextTruncate.AtEnd
+    channel.Parent = row
+
+    local openBtn = Instance.new("TextButton")
+    openBtn.Size = UDim2.new(0, 52, 0, 22)
+    openBtn.Position = UDim2.new(1, -60, 1, -28)
+    openBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+    openBtn.Text = "Open"
+    openBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    openBtn.Font = Enum.Font.GothamBold
+    openBtn.TextSize = 11
+    openBtn.AutoButtonColor = false
+    openBtn.Parent = row
+    Instance.new("UICorner", openBtn).CornerRadius = UDim.new(0, 6)
+
+    openBtn.MouseButton1Click:Connect(function()
+        local url = "https://www.youtube.com/watch?v=" .. id
+        -- Best-effort: set clipboard if available, notify user
+        local copied = false
+        pcall(function()
+            if setclipboard then setclipboard(url) copied = true end
+        end)
+        pcall(function()
+            if toclipboard then toclipboard(url) copied = true end
+        end)
+        StarterGui:SetCore("SendNotification", {
+            Title = "YouTube Player By L",
+            Text = copied and "Link copied to clipboard" or url,
+            Duration = 4
+        })
+        ytStatus.Text = "Selected: " .. (sn.title or id)
+        ytStatus.TextColor3 = Color3.fromRGB(255, 80, 80)
+    end)
+end
+
+local function runYtSearch()
+    if not youtube or not youtube.connected then return end
+    local q = ytSearchBox.Text
+    if not q or q:match("^%s*$") then
+        ytStatus.Text = "Enter a search query"
+        ytStatus.TextColor3 = Color3.fromRGB(220, 80, 80)
+        return
+    end
+    ytStatus.Text = "Searching…"
+    ytStatus.TextColor3 = Color3.fromRGB(200, 200, 100)
+    clearYtResults()
+
+    task.spawn(function()
+        local data, err = youtube:search(q, 12)
+        if not data then
+            ytStatus.Text = tostring(err or "Search failed")
+            ytStatus.TextColor3 = Color3.fromRGB(220, 80, 80)
+            return
+        end
+        if not data.items or #data.items == 0 then
+            ytStatus.Text = "No results"
+            ytStatus.TextColor3 = Color3.fromRGB(160, 160, 160)
+            return
+        end
+        for _, item in ipairs(data.items) do
+            addYtResult(item)
+        end
+        task.defer(function()
+            ytResults.CanvasSize = UDim2.new(0, 0, 0, ytResultsLayout.AbsoluteContentSize.Y + 12)
+        end)
+        ytStatus.Text = "Found " .. #data.items .. " videos"
+        ytStatus.TextColor3 = Color3.fromRGB(255, 80, 80)
+    end)
+end
+
+ytSearchBtn.MouseButton1Click:Connect(runYtSearch)
+ytSearchBox.FocusLost:Connect(function(enter)
+    if enter then runYtSearch() end
+end)
+
+ytClose.MouseButton1Click:Connect(function()
+    ytPanel.Visible = false
+    ytButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    ytButton.TextColor3 = Color3.fromRGB(220, 220, 220)
+end)
+
+ytApply.MouseButton1Click:Connect(function()
+    if not youtube then
+        ytStatus.Text = "YouTube module unavailable"
+        ytStatus.TextColor3 = Color3.fromRGB(220, 80, 80)
+        return
+    end
+
+    if not youtube:setKey(ytKeyBox.Text) then
+        ytStatus.Text = youtube.lastError or "Invalid API key"
+        ytStatus.TextColor3 = Color3.fromRGB(220, 80, 80)
+        ytPlayerFrame.Visible = false
+        return
+    end
+
+    -- Never leave key visible
+    ytKeyBox.Text = ""
+    ytKeyBox.PlaceholderText = "API key stored for this session"
+
+    ytStatus.Text = "Validating…"
+    ytStatus.TextColor3 = Color3.fromRGB(200, 200, 100)
+    ytApply.Text = "…"
+    ytApply.Active = false
+
+    task.spawn(function()
+        local ok, err = youtube:validate()
+        ytApply.Text = "Apply"
+        ytApply.Active = true
+
+        if not ok then
+            ytStatus.Text = tostring(err)
+            ytStatus.TextColor3 = Color3.fromRGB(220, 80, 80)
+            ytPlayerFrame.Visible = false
+            return
+        end
+
+        ytStatus.Text = "Connected — YouTube Player ready"
+        ytStatus.TextColor3 = Color3.fromRGB(255, 80, 80)
+
+        -- Smooth reveal of player UI
+        ytPlayerFrame.Visible = true
+        ytPlayerFrame.BackgroundTransparency = 1
+        TweenService:Create(ytPlayerFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            -- no size tween needed; just visibility + status
+        }):Play()
+    end)
+end)
+
+ytButton.MouseButton1Click:Connect(function()
+    ytPanel.Visible = not ytPanel.Visible
+    if ytPanel.Visible then
+        ytButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+        ytButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    else
+        ytButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+        ytButton.TextColor3 = Color3.fromRGB(220, 220, 220)
+    end
+end)
 
 -- ======================
--- ESP
+-- ESP + TOGGLES + INIT (same as before)
 -- ======================
 local ticketEspFolder = Instance.new("Folder")
 ticketEspFolder.Name = "TicketEspFolder"
 ticketEspFolder.Parent = screenGui
-
 local plrEspFolder = Instance.new("Folder")
 plrEspFolder.Name = "PlrEspFolder"
 plrEspFolder.Parent = screenGui
 
-local function clearTicketESP()
-    for _, v in pairs(ticketEspFolder:GetChildren()) do v:Destroy() end
-end
-local function clearPlrESP()
-    for _, v in pairs(plrEspFolder:GetChildren()) do v:Destroy() end
-end
+local function clearTicketESP() for _, v in pairs(ticketEspFolder:GetChildren()) do v:Destroy() end end
+local function clearPlrESP() for _, v in pairs(plrEspFolder:GetChildren()) do v:Destroy() end end
 
 local function createTicketESP(model)
     if not model or not model.Parent then return end
     local adornee = model:IsA("Model") and (model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")) or model
     if not adornee then return end
     local billboard = Instance.new("BillboardGui")
-    billboard.Name = "TicketESP"
     billboard.Adornee = adornee
     billboard.Size = UDim2.new(0, 80, 0, 25)
     billboard.StudsOffset = Vector3.new(0, 3, 0)
@@ -1032,12 +902,9 @@ end
 
 local function createPlayerESP(plr)
     if not plr or plr == player then return end
-    local char = plr.Character
-    if not char then return end
-    local root = safeGetRoot(char)
+    local root = safeGetRoot(plr.Character)
     if not root then return end
     local billboard = Instance.new("BillboardGui")
-    billboard.Name = "PlayerESP"
     billboard.Adornee = root
     billboard.Size = UDim2.new(0, 120, 0, 30)
     billboard.StudsOffset = Vector3.new(0, 3.5, 0)
@@ -1064,24 +931,15 @@ local function InitializeESP()
         if espEnabled then
             clearTicketESP()
             local ticketFolder = workspace:FindFirstChild("Effects") and workspace.Effects:FindFirstChild("Tickets")
-            if ticketFolder then
-                for _, ticket in pairs(ticketFolder:GetChildren()) do createTicketESP(ticket) end
-            end
-        else
-            clearTicketESP()
-        end
+            if ticketFolder then for _, t in pairs(ticketFolder:GetChildren()) do createTicketESP(t) end end
+        else clearTicketESP() end
         if plrEspEnabled then
             clearPlrESP()
             for _, plr in pairs(Players:GetPlayers()) do createPlayerESP(plr) end
-        else
-            clearPlrESP()
-        end
+        else clearPlrESP() end
     end)
 end
 
--- ======================
--- TOGGLES
--- ======================
 toggleButton.MouseButton1Click:Connect(function()
     isEnabled = not isEnabled
     if isEnabled then
@@ -1122,10 +980,7 @@ plrEspButton.MouseButton1Click:Connect(function()
     end
 end)
 
--- ======================
--- CHARACTER / PLAYERS
--- ======================
-local function onCharacterAdded(char)
+connections.characterAdded = player.CharacterAdded:Connect(function(char)
     task.wait(0.8)
     if isEnabled then teleportAndLock() end
     if spectateEnabled and selectedSpectatePlayer then
@@ -1135,9 +990,7 @@ local function onCharacterAdded(char)
         local myHum = safeGetHumanoid(char)
         if myHum and not spectateEnabled then camera.CameraSubject = myHum end
     end
-end
-
-connections.characterAdded = player.CharacterAdded:Connect(onCharacterAdded)
+end)
 
 connections.playerAdded = Players.PlayerAdded:Connect(function()
     if dropdownFrame.Visible then RefreshPlayerList() end
@@ -1152,9 +1005,6 @@ connections.playerRemoving = Players.PlayerRemoving:Connect(function(leaving)
     if dropdownFrame.Visible then RefreshPlayerList() end
 end)
 
--- ======================
--- INIT
--- ======================
 print("L Farmer v" .. VERSION .. " Initialized")
 
 StarterGui:SetCore("SendNotification", {
@@ -1178,4 +1028,5 @@ screenGui.Destroying:Connect(function()
     StopSpectating()
     unlock()
     if spotify then spotify:clearToken() end
+    if youtube then youtube:clearKey() end
 end)
