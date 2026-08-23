@@ -1,8 +1,8 @@
 --[[
-    L Farmer v1.6.0 entry
-    Core Main + Friend Manager + Evade RoundDetector + Overhead Round Timer
+    L Farmer v1.7.0 entry
+    Core + Friends + RoundDetector + Round Timer + Sunset Shader
 ]]
-local VERSION = "1.6.0"
+local VERSION = "1.7.0"
 
 local src = game:HttpGet("https://raw.githubusercontent.com/ideBob/L-Farmer/5dc176b100190492b93ce9e89655ad36ea18f58d/src/Main.lua")
 local fn, err = loadstring(src)
@@ -49,16 +49,27 @@ local function makeDraggableFactory()
     end
 end
 
+local function waitForGui()
+    local player = game:GetService("Players").LocalPlayer
+    local gui = player.PlayerGui:FindFirstChild("LFarmerGui")
+    if gui then return gui end
+    for _ = 1, 40 do
+        task.wait(0.15)
+        gui = player.PlayerGui:FindFirstChild("LFarmerGui")
+        if gui then return gui end
+    end
+    return nil
+end
+
 -- Friend Request Manager
 task.defer(function()
     local FriendManager = loadMod("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/FriendManager.lua")
     local installFriendUI = loadMod("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/FriendRequestUI.lua")
     if type(installFriendUI) ~= "function" or not FriendManager then return end
-    local player = game:GetService("Players").LocalPlayer
-    local gui = player.PlayerGui:FindFirstChild("LFarmerGui")
+    local gui = waitForGui()
     if not gui or gui:FindFirstChild("FriendRequestPanel") then return end
-    local TweenService = game:GetService("TweenService")
     local StarterGui = game:GetService("StarterGui")
+    local TweenService = game:GetService("TweenService")
     pcall(installFriendUI, gui, makeDraggableFactory(), StarterGui, TweenService, FriendManager)
 end)
 
@@ -68,23 +79,22 @@ task.defer(function()
     if type(boot) == "function" then pcall(boot) end
 end)
 
--- Overhead Round Timer section
+-- Overhead Round Timer
 task.defer(function()
-    local player = game:GetService("Players").LocalPlayer
-    local gui = player.PlayerGui:FindFirstChild("LFarmerGui")
-    if not gui then
-        for _ = 1, 30 do
-            task.wait(0.2)
-            gui = player.PlayerGui:FindFirstChild("LFarmerGui")
-            if gui then break end
-        end
-    end
+    local gui = waitForGui()
     if not gui or gui:FindFirstChild("RoundTimerPanel") then return end
-
     local OverheadTimer = loadMod("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/RoundTimer/OverheadTimer.lua")
     local installUI = loadMod("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/RoundTimer/RoundTimerUI.lua")
     if type(installUI) ~= "function" or not OverheadTimer then return end
+    pcall(installUI, gui, makeDraggableFactory(), game:GetService("StarterGui"), OverheadTimer)
+end)
 
-    local StarterGui = game:GetService("StarterGui")
-    pcall(installUI, gui, makeDraggableFactory(), StarterGui, OverheadTimer)
+-- Sunset Shader
+task.defer(function()
+    local gui = waitForGui()
+    if not gui or gui:FindFirstChild("SunsetPanel") then return end
+    local SunsetShader = loadMod("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/Sunset/SunsetShader.lua")
+    local installUI = loadMod("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/Sunset/SunsetUI.lua")
+    if type(installUI) ~= "function" or not SunsetShader then return end
+    pcall(installUI, gui, makeDraggableFactory(), game:GetService("StarterGui"), SunsetShader)
 end)
