@@ -1,6 +1,5 @@
 --[[
     L Farmer — Rayfield Gen2 Hub (pure black theme)
-    loadstring-friendly module: returns bootstrap function.
 ]]
 
 return function()
@@ -14,7 +13,6 @@ return function()
 		return nil
 	end
 
-	-- Pure black custom theme
 	local BlackTheme = {
 		TextColor = Color3.fromRGB(235, 235, 240),
 		Background = Color3.fromRGB(8, 8, 10),
@@ -48,7 +46,6 @@ return function()
 		end)
 	end
 
-	-- ---------- load feature modules ----------
 	local function loadMod(url)
 		local ok, body = pcall(function() return game:HttpGet(url) end)
 		if not ok or type(body) ~= "string" then return nil end
@@ -60,15 +57,26 @@ return function()
 	end
 
 	local BASE = "https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/"
-
-	-- ---------- MAIN tab ----------
-	local mainTab = window:CreateTab({ name = "Main" })
-	mainTab:CreateSection({ name = "AFK / Farmer" })
-
-	-- Core AFK state (lightweight bridge into existing systems via getgenv)
-	local g = getgenv and getgenv() or _G
+	local g = (getgenv and getgenv()) or _G
 	g.LFarmer = g.LFarmer or {}
 	local LF = g.LFarmer
+
+	local function clickFloating(matchText)
+		pcall(function()
+			local gui = game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("LFarmerGui")
+			if not gui then return end
+			for _, d in ipairs(gui:GetDescendants()) do
+				if d:IsA("TextButton") and tostring(d.Text):find(matchText, 1, true) then
+					d:Activate()
+					return
+				end
+			end
+		end)
+	end
+
+	-- MAIN
+	local mainTab = window:CreateTab({ name = "Main" })
+	mainTab:CreateSection({ name = "AFK / Farmer" })
 
 	mainTab:CreateToggle({
 		name = "L Farmer (AFK Lock)",
@@ -76,17 +84,12 @@ return function()
 		flag = "LF_Enabled",
 		callback = function(v)
 			LF.Enabled = v
-			-- fire existing floating button if present
 			pcall(function()
 				local gui = game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("LFarmerGui")
-				if not gui then return end
-				local btn = gui:FindFirstChild("Main") and gui.Main:FindFirstChild("Button")
-				if btn and btn:IsA("TextButton") then
-					-- simulate click only if state differs
-					local isOn = btn.Text:find("ON")
-					if (v and not isOn) or ((not v) and isOn) then
-						btn:Activate()
-					end
+				local btn = gui and gui:FindFirstChild("Main") and gui.Main:FindFirstChild("Button")
+				if btn then
+					local isOn = tostring(btn.Text):find("ON")
+					if (v and not isOn) or ((not v) and isOn) then btn:Activate() end
 				end
 			end)
 			notify("L Farmer", v and "AFK lock ON" or "AFK lock OFF")
@@ -102,7 +105,7 @@ return function()
 				local gui = game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("LFarmerGui")
 				local btn = gui and gui:FindFirstChild("EspFrame") and gui.EspFrame:FindFirstChild("Button")
 				if btn then
-					local isOn = btn.Text:find("ON")
+					local isOn = tostring(btn.Text):find("ON")
 					if (v and not isOn) or ((not v) and isOn) then btn:Activate() end
 				end
 			end)
@@ -118,7 +121,7 @@ return function()
 				local gui = game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("LFarmerGui")
 				local btn = gui and gui:FindFirstChild("PlrEspFrame") and gui.PlrEspFrame:FindFirstChild("Button")
 				if btn then
-					local isOn = btn.Text:find("ON")
+					local isOn = tostring(btn.Text):find("ON")
 					if (v and not isOn) or ((not v) and isOn) then btn:Activate() end
 				end
 			end)
@@ -129,16 +132,12 @@ return function()
 	mainTab:CreateButton({
 		name = "Turn Off Spectate",
 		callback = function()
-			pcall(function()
-				local gui = game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("LFarmerGui")
-				local btn = gui and gui:FindFirstChild("TurnOffSpectateFrame") and gui.TurnOffSpectateFrame:FindFirstChild("Button")
-				if btn then btn:Activate() end
-			end)
+			clickFloating("Turn Off Spectate")
 			notify("Spectate", "Stopped")
 		end,
 	})
 
-	-- ---------- ROUND TIMER tab ----------
+	-- ROUND TIMER
 	local rtTab = window:CreateTab({ name = "Round Timer" })
 	rtTab:CreateSection({ name = "Overhead Timer" })
 
@@ -200,7 +199,7 @@ return function()
 		end,
 	})
 
-	-- ---------- SUNSET tab ----------
+	-- SUNSET
 	local sunTab = window:CreateTab({ name = "Sunset" })
 	sunTab:CreateSection({ name = "Cinematic Shader" })
 
@@ -218,60 +217,29 @@ return function()
 		end,
 	})
 
-	-- ---------- FRIENDS tab ----------
+	-- FRIENDS
 	local frTab = window:CreateTab({ name = "Friends" })
 	frTab:CreateSection({ name = "Friend Requests" })
-	frTab:CreateParagraph({
-		name = "Note",
-		content = "Pending accept/decline depends on authenticated friends API access. Official experiences cannot list requests. Use the floating Friends panel for the full UI when available.",
-	})
 	frTab:CreateButton({
 		name = "Open Friends Panel",
 		callback = function()
-			pcall(function()
-				local gui = game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("LFarmerGui")
-				local btn = gui and gui:FindFirstChild("FriendsBtnFrame") and gui.FriendsBtnFrame:FindFirstChild("TextButton")
-				if not btn then
-					for _, d in ipairs(gui and gui:GetDescendants() or {}) do
-						if d:IsA("TextButton") and d.Text == "Friends" then btn = d break end
-					end
-				end
-				if btn then btn:Activate() end
-			end)
+			clickFloating("Friends")
 		end,
 	})
 
-	-- ---------- MEDIA tab ----------
+	-- MEDIA
 	local mediaTab = window:CreateTab({ name = "Media" })
 	mediaTab:CreateSection({ name = "Spotify / YouTube" })
-	mediaTab:CreateParagraph({
-		name = "Info",
-		content = "Spotify and YouTube panels remain available via their floating buttons when core UI is loaded. Use those for API keys and media cards.",
-	})
 	mediaTab:CreateButton({
 		name = "Open Spotify",
-		callback = function()
-			pcall(function()
-				local gui = game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("LFarmerGui")
-				for _, d in ipairs(gui and gui:GetDescendants() or {}) do
-					if d:IsA("TextButton") and d.Text == "Spotify" then d:Activate() break end
-				end
-			end)
-		end,
+		callback = function() clickFloating("Spotify") end,
 	})
 	mediaTab:CreateButton({
 		name = "Open YouTube",
-		callback = function()
-			pcall(function()
-				local gui = game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("LFarmerGui")
-				for _, d in ipairs(gui and gui:GetDescendants() or {}) do
-					if d:IsA("TextButton") and d.Text == "YouTube" then d:Activate() break end
-				end
-			end)
-		end,
+		callback = function() clickFloating("YouTube") end,
 	})
 
-	-- ---------- SETTINGS tab ----------
+	-- SETTINGS
 	local setTab = window:CreateTab({ name = "Settings" })
 	setTab:CreateSection({ name = "Interface" })
 	setTab:CreateButton({
@@ -281,10 +249,7 @@ return function()
 			notify("Theme", "Black theme applied")
 		end,
 	})
-	setTab:CreateParagraph({
-		name = "About",
-		content = "L Farmer v" .. VERSION .. " · Rayfield Gen2 · Black theme\nCore floating UI still runs underneath for full feature parity.",
-	})
+	setTab:CreateSection({ name = "L Farmer v" .. VERSION .. " · Rayfield Gen2 · Black" })
 
 	notify("L Farmer", "Rayfield Gen2 ready · v" .. VERSION)
 	return window
