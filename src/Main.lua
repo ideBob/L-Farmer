@@ -1,9 +1,10 @@
 --[[
-    L Farmer v1.7.0 entry
-    Core + Friends + RoundDetector + Round Timer + Sunset Shader
+    L Farmer v2.0.0 entry
+    Core features + Rayfield Gen2 black theme hub
 ]]
-local VERSION = "1.7.0"
+local VERSION = "2.0.0"
 
+-- Core floating UI (feature backend)
 local src = game:HttpGet("https://raw.githubusercontent.com/ideBob/L-Farmer/5dc176b100190492b93ce9e89655ad36ea18f58d/src/Main.lua")
 local fn, err = loadstring(src)
 if not fn then
@@ -61,40 +62,49 @@ local function waitForGui()
     return nil
 end
 
--- Friend Request Manager
+-- Optional modules (floating panels still available)
 task.defer(function()
     local FriendManager = loadMod("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/FriendManager.lua")
     local installFriendUI = loadMod("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/FriendRequestUI.lua")
-    if type(installFriendUI) ~= "function" or not FriendManager then return end
-    local gui = waitForGui()
-    if not gui or gui:FindFirstChild("FriendRequestPanel") then return end
-    local StarterGui = game:GetService("StarterGui")
-    local TweenService = game:GetService("TweenService")
-    pcall(installFriendUI, gui, makeDraggableFactory(), StarterGui, TweenService, FriendManager)
+    if type(installFriendUI) == "function" and FriendManager then
+        local gui = waitForGui()
+        if gui and not gui:FindFirstChild("FriendRequestPanel") then
+            pcall(installFriendUI, gui, makeDraggableFactory(), game:GetService("StarterGui"), game:GetService("TweenService"), FriendManager)
+        end
+    end
 end)
 
--- Evade RoundDetector
 task.defer(function()
     local boot = loadMod("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/Evade/Bootstrap.lua")
     if type(boot) == "function" then pcall(boot) end
 end)
 
--- Overhead Round Timer
 task.defer(function()
     local gui = waitForGui()
-    if not gui or gui:FindFirstChild("RoundTimerPanel") then return end
-    local OverheadTimer = loadMod("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/RoundTimer/OverheadTimer.lua")
-    local installUI = loadMod("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/RoundTimer/RoundTimerUI.lua")
-    if type(installUI) ~= "function" or not OverheadTimer then return end
-    pcall(installUI, gui, makeDraggableFactory(), game:GetService("StarterGui"), OverheadTimer)
+    if gui and not gui:FindFirstChild("RoundTimerPanel") then
+        local OverheadTimer = loadMod("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/RoundTimer/OverheadTimer.lua")
+        local installUI = loadMod("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/RoundTimer/RoundTimerUI.lua")
+        if type(installUI) == "function" and OverheadTimer then
+            pcall(installUI, gui, makeDraggableFactory(), game:GetService("StarterGui"), OverheadTimer)
+        end
+    end
 end)
 
--- Sunset Shader
 task.defer(function()
     local gui = waitForGui()
-    if not gui or gui:FindFirstChild("SunsetPanel") then return end
-    local SunsetShader = loadMod("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/Sunset/SunsetShader.lua")
-    local installUI = loadMod("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/Sunset/SunsetUI.lua")
-    if type(installUI) ~= "function" or not SunsetShader then return end
-    pcall(installUI, gui, makeDraggableFactory(), game:GetService("StarterGui"), SunsetShader)
+    if gui and not gui:FindFirstChild("SunsetPanel") then
+        local SunsetShader = loadMod("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/Sunset/SunsetShader.lua")
+        local installUI = loadMod("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/Sunset/SunsetUI.lua")
+        if type(installUI) == "function" and SunsetShader then
+            pcall(installUI, gui, makeDraggableFactory(), game:GetService("StarterGui"), SunsetShader)
+        end
+    end
+end)
+
+-- Rayfield Gen2 black hub (primary UI)
+task.defer(function()
+    local hub = loadMod("https://raw.githubusercontent.com/ideBob/L-Farmer/main/src/UI/RayfieldHub.lua")
+    if type(hub) == "function" then
+        pcall(hub)
+    end
 end)
